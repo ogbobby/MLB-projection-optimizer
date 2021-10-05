@@ -626,11 +626,12 @@ class OptimizerMLB:
         return 'Complete'
     
 
-
+#%%
 if __name__ == "__main__":
     
     ########## READ AND CLEAN DATA ##########
-    date = '2021-08-26_MAIN'
+    date = '2021-09-04_MAIN'
+    filename = str(input("csv filename: "))
     
     filename_dk = './data-dk/DKSalaries_' + date + '.csv'
     filename_proj = './data-projected/DFF_MLB_cheatsheet_' + date + '.csv'
@@ -659,11 +660,16 @@ if __name__ == "__main__":
     # check that join worked and len of data_proj == not null values in merged
     merged['ppg_projection'].notnull().sum() == data_proj.shape[0]
     
+    optimizer = OptimizerMLB(merged)
     
+#%%    
     ########## CREATE LINEUPS ##########
     
+    ### Create x # of auto stacked lineups
+    
     # create object
-    optimizer = OptimizerMLB(merged)
+    #optimizer = OptimizerMLB(merged)
+    
     # run lineups
     num_lineups = int(input("number of lineups: "))
     optimizer.run_lineups(num_lineups, 
@@ -672,11 +678,48 @@ if __name__ == "__main__":
                           stack_num=4,
                           variance=2)
         
-    ########## Export to CSV ##########
-    filename = str(input("csv filename: "))
+    # Export to CSV #
+    optimizer.csv_output(filename)
+    
+#%%    
+    ### Create lineups with certain teams stacked
+#    stack_teams = str(input("Teams to stack (comma separated):\n")).split(", ")
+#    num_lineups_per_team = int(input("Number of lineups per team:\n"))
+    
+    #stack_teams_dict = dict(input("Dictionary - Team : Num lineups"))
+    stack_teams_dict = {
+            "CWS": 15,
+            "CIN": 15,
+            "LAA": 14,
+            "LAD": 14,
+            "SEA": 14,
+            "MIL": 14,
+            "ARI": 14
+        }
+    #optimizer = OptimizerMLB(merged)
+    
+    for team, num_lineups_team in stack_teams_dict.items():
+        print("Team: " + team)
+        optimizer.run_lineups(num_lineups_team,
+                              team_stack=team,
+                              stack_num=4,
+                              variance=1,
+                              print_progress=True
+                )
+        print("-"*10)
+    
+    # Export to CSV #
     optimizer.csv_output(filename)
 
-
+#%%
 ##### NEXT STEPS #########
     
+# Teams
     
+tstr = "a:1, b:2"
+d = {}
+for s in tstr.split(","):
+    s_split = s.split(":")
+    d[s_split[0]] = int(s_split[1])
+
+

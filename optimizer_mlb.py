@@ -19,11 +19,11 @@ class OptimizerMLB:
         self, columns=["ppg_projection", "Salary"], point_col="ppg_projection"
     ):
         """Turn columns listed in 'columns' parameter into integer columns.
-        The point column, 'point_col', will be multiplied by 10 to get rid of
-        decimal if there is one.
 
-        Need to turn all columns into integer columns as optimizer only works
-        over integers and any float columns will return errors.
+        The point column, 'point_col', will be multiplied by 10 to get rid of
+        decimal if there is one. This is necessary as optimizer will give error if data
+        is not of ``int`` type. ``float`` and any other data types used in optimizer
+        will raise an error.
 
         Parameters
         ----------
@@ -39,21 +39,17 @@ class OptimizerMLB:
         for col in columns:
             if col == point_col:
                 self.df[col] = self.df[col] * 10
-
             self.df[col] = self.df[col].astype(int)
 
     def dual_position(self, colname="Position"):
         """Create 2 separate rows for any player with dual positions (ex: "2B/SS").
-
-        Use *self.valid_lineup()* method to validate player is only used once
-        in lineup and not used for both positions.
 
         Parameters
         ----------
         colname : str, default 'position'
             Name of column containing string position values for each player.
         """
-        # copy df of only players with dual positions
+        # `duals` = only players with dual positions
         duals = self.df[self.df[colname].str.contains("/")].copy()
 
         # use first position in self.df
@@ -65,39 +61,18 @@ class OptimizerMLB:
         # append duals back to self.df
         self.df = self.df.append(duals)
 
-    def point_min_filter(self, point_minimum=1):
-        """Filter dataframe attribute (self.df) to only keep rows with projected
-        points greater than the 'point_minimum' parameter. Function also resets
-        and adds 'index' column to rows so it can be used to make sure all
-        players returned for lineups are unique.
-
-        Parameters
-        ----------
-        point_minimum : int or float, default 1
-            Minimum projected points value for rows in self.df
-        """
-        assert point_minimum > 0, "'point_minimum' parameter must be > 0"
-
-        # filter df
-        self.df = self.df[self.df["ppg_projection"] > point_minimum].copy()
-
-        # reset index after filtering
-        self.df.reset_index(inplace=True, drop=True)
-        # reset index again, but keep old index to use as player ID
-        self.df.reset_index(inplace=True, drop=False)
-
     def position_bools(self, colname="Position"):
-        """Add columns to dataframe (self.df) attribute. Columns added have
-        1 or 0 values based on the players (row) *colname* (position) parameter
-        value.
+        """Add positional boolean columns to dataframe.
+
+        Each added boolean column represents if a player has eligibility at the
+        specified position.
 
         Parameters
         ----------
-        colname : str, default 'position'
+        colname : str, default 'Position'
             Name of column containing string position values for each player.
         """
-        # add positional boolean columns to self.df attribute using apply and
-        # lambda functions based on position_col parameter
+        self.df[colname] = self.df[colname].str.upper()
         self.df["P_bool"] = self.df[colname].apply(lambda x: 1 if "P" in x else 0)
         self.df["C_bool"] = self.df[colname].apply(lambda x: 1 if "C" in x else 0)
         self.df["1B_bool"] = self.df[colname].apply(lambda x: 1 if "1B" in x else 0)
@@ -106,22 +81,61 @@ class OptimizerMLB:
         self.df["SS_bool"] = self.df[colname].apply(lambda x: 1 if "SS" in x else 0)
         self.df["OF_bool"] = self.df[colname].apply(lambda x: 1 if "OF" in x else 0)
 
-    def format_data(
+    def hitter_pitcher_split(self):
+        """Split dataframe into two based on if player is a pitcher or hitter.
+
+        Indexes for each created dataframe (``self.pitcher_df`` and ``self.hitter_df``)
+        are reset and then used to create an ID column "index".
+
+        Should be run AFTER the ``OptimizerMLB.dual_position()`` method.
+        """
+        self.pitcher_df = self.df[self.df["Position"].str.contains("P")].copy()
+        self.hitter_df = self.df[~self.df["Position"].str.contains("P")].copy()
+
+        # reindex hitter and pitcher dfs so both start at 0
+        # reset index after splitting and filtering
+        self.pitcher_df.reset_index(inplace=True, drop=True)
+        self.hitter_df.reset_index(inplace=True, drop=True)
+        # reset index again, but keep old index to use as player ID
+        self.pitcher_df.reset_index(inplace=True, drop=False)
+        self.hitter_df.reset_index(inplace=True, drop=False)
+
+    def create_dummy_dfs(self):
+        """Create dummy dataframes to be used for certain constraints in model.
+
+        DataFrames created used in constraints for player name, pitcher opponent,
+        number of players eligible from single game, and hitter team (for stacking).
+
+        Used when building model in ``OptimizerMLB.create_lineup()`` method.
+        """
+        self.hitter_name_dummies = pd.get_dummies(self.hitter_df["Name"])
+        self.pitcher_opp_dummies = pd.get_dummies(self.hitter_df["opp"])
+        self.pitcher_game_dummies = pd.get_dummies(self.pitcher_df["Game Info"])
+        self.hitter_game_dummies = pd.get_dummies(self.hitter_df["Game Info"])
+        self.hitter_team_dummies = pd.get_dummies(self.hitter_df["team"])
+
+    def transform_data(
         self,
         point_minimum=1,
-        int_cols=["ppg_projection", "Salary"],
+        to_int_cols=["ppg_projection", "Salary"],
         point_col="ppg_projection",
         position_col="Position",
     ):
-        """Format dataframe attribute (self.df), adds object attributes, and
-        adds 2 new attributes - self.hitter_df and self.pitcher_df - to be
-        used in the 'create_lineup()' method.
+        """Transform DataFrame for use in ``create_lineup()`` method.
+
+        Data transformations performed:
+            1. Filter to rows above ``point_minimum`` threshold.
+            2. Convert ``to_int_columns`` to integer dtype.
+            3. Create boolean columns based on positional eligibility.
+            4. Split dataframe into 2 based on pitcher or hitter.
+            5. Creates dummy dataframes for features like player name, opponent, team,
+            etc. to be used as constraints in model.
 
         Parameters
         ----------
         point_minimum : int or float, default 1
             Minimum projected points value for rows in self.df
-        int_columns : list, default ['ppg_projection', 'Salary']
+        to_int_columns : list, default ['ppg_projection', 'Salary']
             List of columns to turn into integer type.
         point_col : str, default 'ppg_projection'
             Column of projected points which is multiplied by 10 to eliminate
@@ -131,37 +145,13 @@ class OptimizerMLB:
         position_col : str
             Name of column containing string position values for each player.
         """
-        # filter to only players with projections
         self.df = self.df[self.df[point_col] > point_minimum].copy()
-
-        # turn any numeric columns using in optimizer to integer type
-        # IF NOT INTEGER OPTIMIZER WILL NOT WORK
-        self.int_cols(columns=int_cols, point_col=point_col)
-
-        # account for dual position players
+        # NOTE: OPTIMIZER WILL NOT WORK WITH NON-INTEGER COLUMNS
+        self.int_cols(columns=to_int_cols, point_col=point_col)
         self.dual_position(colname=position_col)
-
-        # create positional dataframes
         self.position_bools(colname=position_col)
-
-        # separate into hitter and pitcher dfs
-        self.pitcher_df = self.df[self.df["Position"].str.contains("P")].copy()
-        self.hitter_df = self.df[~self.df["Position"].str.contains("P")].copy()
-
-        # reindex hitter and pitcher dfs so both start at 0
-        # reset index after filtering
-        self.pitcher_df.reset_index(inplace=True, drop=True)
-        self.hitter_df.reset_index(inplace=True, drop=True)
-        # reset index again, but keep old index to use as player ID
-        self.pitcher_df.reset_index(inplace=True, drop=False)
-        self.hitter_df.reset_index(inplace=True, drop=False)
-
-        # Add dfs for dummy values - used in create_lineup() method
-        self.hitter_name_dummies = pd.get_dummies(self.hitter_df["Name"])
-        self.pitcher_opp_dummies = pd.get_dummies(self.hitter_df["opp"])
-        self.pitcher_game_dummies = pd.get_dummies(self.pitcher_df["Game Info"])
-        self.hitter_game_dummies = pd.get_dummies(self.hitter_df["Game Info"])
-        self.hitter_team_dummies = pd.get_dummies(self.hitter_df["team"])
+        self.hitter_pitcher_split()
+        self.create_dummy_dfs()
 
     def create_lineup(
         self,
@@ -572,7 +562,7 @@ class OptimizerMLB:
                 pass
 
         # format data
-        self.format_data()
+        self.transform_data()
 
         # create empty lists that will end up as list of lists
         # will create empty lists if not already created

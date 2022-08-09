@@ -1,4 +1,5 @@
 import csv
+from copy import deepcopy
 
 import pandas as pd
 from ortools.sat.python import cp_model
@@ -153,6 +154,156 @@ class OptimizerMLB:
         self.hitter_pitcher_split()
         self.create_dummy_dfs()
 
+    def create_model(self):
+        """Create the Constraint Programming model object and decision variables."""
+        self.model = cp_model.CpModel()
+
+        # List of decision variables for each position
+        self.pitchers = [
+            self.model.NewBoolVar(self.pitcher_df.iloc[i]["Name"])
+            for i in range(len(self.pitcher_df))
+        ]
+        self.hitters = [
+            self.model.NewBoolVar(self.hitter_df.iloc[i]["Name"])
+            for i in range(len(self.hitter_df))
+        ]
+
+    def add_model_constraints(self):
+        """Add constraints to ``self.model`` that are constant across all lineups."""
+        # NUMBER PLAYERS constraint
+        # Also doubles as an All Different constraint b/c 10 unique players
+        # need to be selected
+        self.model.Add(sum([self.pitchers[i] for i in range(len(self.pitchers))]) == 2)
+        self.model.Add(sum([self.hitters[i] for i in range(len(self.hitters))]) == 8)
+
+        # Make sure each player name is used only once - account for dual
+        # position players
+        for col in self.hitter_name_dummies.columns:
+            self.model.Add(
+                sum(
+                    [
+                        self.hitters[i] * self.hitter_name_dummies.loc[i, col]
+                        for i in range(len(self.hitters))
+                    ]
+                )
+                <= 1
+            )
+        # SALARY constraint
+        self.model.Add(
+            sum(
+                [
+                    self.pitchers[i] * self.pitcher_df.loc[i]["Salary"]
+                    for i in range(len(self.pitchers))
+                ]
+            )
+            + sum(
+                [
+                    self.hitters[i] * self.hitter_df.loc[i]["Salary"]
+                    for i in range(len(self.hitters))
+                ]
+            )
+            <= 50000
+        )
+        # POSITON constraints
+        self.model.Add(
+            sum(
+                [
+                    self.hitters[i] * self.hitter_df.loc[i]["C_bool"]
+                    for i in range(len(self.hitters))
+                ]
+            )
+            == 1
+        )
+        self.model.Add(
+            sum(
+                [
+                    self.hitters[i] * self.hitter_df.loc[i]["1B_bool"]
+                    for i in range(len(self.hitters))
+                ]
+            )
+            == 1
+        )
+        self.model.Add(
+            sum(
+                [
+                    self.hitters[i] * self.hitter_df.loc[i]["2B_bool"]
+                    for i in range(len(self.hitters))
+                ]
+            )
+            == 1
+        )
+        self.model.Add(
+            sum(
+                [
+                    self.hitters[i] * self.hitter_df.loc[i]["3B_bool"]
+                    for i in range(len(self.hitters))
+                ]
+            )
+            == 1
+        )
+        self.model.Add(
+            sum(
+                [
+                    self.hitters[i] * self.hitter_df.loc[i]["SS_bool"]
+                    for i in range(len(self.hitters))
+                ]
+            )
+            == 1
+        )
+        self.model.Add(
+            sum(
+                [
+                    self.hitters[i] * self.hitter_df.loc[i]["OF_bool"]
+                    for i in range(len(self.hitters))
+                ]
+            )
+            == 3
+        )
+        # PITCHER NOT FACING HITTERS constraint
+        for i in range(len(self.pitchers)):
+            team = self.pitcher_df.loc[i, "team"]
+            self.model.Add(
+                8 * self.pitchers[i]
+                + sum(
+                    [
+                        self.hitters[k] * self.pitcher_opp_dummies.loc[k, team]
+                        for k in range(len(self.hitters))
+                    ]
+                )
+                <= 8
+            )
+        # PLAYERS FROM AT LEAST 2 GAMES constraint
+        # sum pitcher and hitter from any game and has to be less than 9
+        # 10 players in each game, meaning at most 9 can be selected
+        # from a single game
+        for game in self.pitcher_game_dummies.columns:
+            self.model.Add(
+                sum(
+                    [
+                        self.pitchers[i] * self.pitcher_game_dummies.loc[i, game]
+                        for i in range(len(self.pitchers))
+                    ]
+                )
+                + sum(
+                    [
+                        self.hitters[i] * self.hitter_game_dummies.loc[i, game]
+                        for i in range(len(self.hitters))
+                    ]
+                )
+                <= 9
+            )
+        # NO MORE THAN 5 HITTERS FROM ONE TEAM constraint
+        for team in self.hitter_team_dummies.columns:
+            self.model.Add(
+                sum(
+                    [
+                        self.hitters[i] * self.hitter_team_dummies.loc[i, team]
+                        for i in range(len(self.hitters))
+                    ]
+                )
+                <= 5
+            )
+
     def create_lineup(
         self,
         binary_lineups_pitchers,
@@ -221,112 +372,14 @@ class OptimizerMLB:
         )
         assert stack_num >= 0 and stack_num <= 5, "'stack_num' must be >= 0 and <= 5"
 
-        # create CP model
-        model = cp_model.CpModel()
+        if not hasattr(self, "model"):
+            self.create_model()
+            self.add_model_constraints()
+        # Start with copy of model with constant constraints and add flexible ones as
+        # needed below based on function args
+        model = deepcopy(self.model)
 
-        # create list of decision variables for each position
-        pitchers = [
-            model.NewBoolVar(self.pitcher_df.iloc[i]["Name"])
-            for i in range(len(self.pitcher_df))
-        ]
-        hitters = [
-            model.NewBoolVar(self.hitter_df.iloc[i]["Name"])
-            for i in range(len(self.hitter_df))
-        ]
-
-        ###################### ADD CONSTRAINTS ######################
-
-        # NUMBER PLAYERS constraint
-        # Also doubles as an All Different constraint b/c 10 unique players
-        # need to be selected
-        model.Add(sum([pitchers[i] for i in range(len(pitchers))]) == 2)
-        model.Add(sum([hitters[i] for i in range(len(hitters))]) == 8)
-
-        # Make sure each player name is used only once - account for dual
-        # position players
-        for col in self.hitter_name_dummies.columns:
-            model.Add(
-                sum(
-                    [
-                        hitters[i] * self.hitter_name_dummies.loc[i, col]
-                        for i in range(len(hitters))
-                    ]
-                )
-                <= 1
-            )
-
-        # SALARY constraint
-        model.Add(
-            sum(
-                [
-                    pitchers[i] * self.pitcher_df.loc[i]["Salary"]
-                    for i in range(len(pitchers))
-                ]
-            )
-            + sum(
-                [
-                    hitters[i] * self.hitter_df.loc[i]["Salary"]
-                    for i in range(len(hitters))
-                ]
-            )
-            <= 50000
-        )
-
-        # POSITON constraints
-        model.Add(
-            sum(
-                [
-                    hitters[i] * self.hitter_df.loc[i]["C_bool"]
-                    for i in range(len(hitters))
-                ]
-            )
-            == 1
-        )
-        model.Add(
-            sum(
-                [
-                    hitters[i] * self.hitter_df.loc[i]["1B_bool"]
-                    for i in range(len(hitters))
-                ]
-            )
-            == 1
-        )
-        model.Add(
-            sum(
-                [
-                    hitters[i] * self.hitter_df.loc[i]["2B_bool"]
-                    for i in range(len(hitters))
-                ]
-            )
-            == 1
-        )
-        model.Add(
-            sum(
-                [
-                    hitters[i] * self.hitter_df.loc[i]["3B_bool"]
-                    for i in range(len(hitters))
-                ]
-            )
-            == 1
-        )
-        model.Add(
-            sum(
-                [
-                    hitters[i] * self.hitter_df.loc[i]["SS_bool"]
-                    for i in range(len(hitters))
-                ]
-            )
-            == 1
-        )
-        model.Add(
-            sum(
-                [
-                    hitters[i] * self.hitter_df.loc[i]["OF_bool"]
-                    for i in range(len(hitters))
-                ]
-            )
-            == 3
-        )
+        ###################### ADD FLEXIBLE CONSTRAINTS ######################
 
         # VARIANCE constraint
         # constraint is the number of players in each new lineup that must
@@ -348,64 +401,17 @@ class OptimizerMLB:
             model.Add(
                 sum(
                     [
-                        binary_lineups_pitchers[k][i] * pitchers[i]
-                        for i in range(len(pitchers))
+                        binary_lineups_pitchers[k][i] * self.pitchers[i]
+                        for i in range(len(self.pitchers))
                     ]
                 )
                 + sum(
                     [
-                        binary_lineups_hitters[k][i] * hitters[i]
-                        for i in range(len(hitters))
+                        binary_lineups_hitters[k][i] * self.hitters[i]
+                        for i in range(len(self.hitters))
                     ]
                 )
                 <= variance
-            )
-
-        # PITCHER NOT FACING HITTERS constraint
-        for i in range(len(pitchers)):
-            team = self.pitcher_df.loc[i, "team"]
-            model.Add(
-                8 * pitchers[i]
-                + sum(
-                    [
-                        hitters[k] * self.pitcher_opp_dummies.loc[k, team]
-                        for k in range(len(hitters))
-                    ]
-                )
-                <= 8
-            )
-
-        # PLAYERS FROM AT LEAST 2 GAMES constraint
-        # sum pitcher and hitter from any gameand has to be less than 9
-        # 10 players in each game, meaning at most 9 can be selected
-        # from a single game
-        for game in self.pitcher_game_dummies.columns:
-            model.Add(
-                sum(
-                    [
-                        pitchers[i] * self.pitcher_game_dummies.loc[i, game]
-                        for i in range(len(pitchers))
-                    ]
-                )
-                + sum(
-                    [
-                        hitters[i] * self.hitter_game_dummies.loc[i, game]
-                        for i in range(len(hitters))
-                    ]
-                )
-                <= 9
-            )
-
-        # NO MORE THAN 5 HITTERS FROM ONE TEAM constraint
-        for team in self.hitter_team_dummies.columns:
-            model.Add(
-                sum(
-                    [
-                        hitters[i] * self.hitter_team_dummies.loc[i, team]
-                        for i in range(len(hitters))
-                    ]
-                )
-                <= 5
             )
 
         # STACKING constraint - auto stack, no input on specific teams to stack
@@ -421,8 +427,8 @@ class OptimizerMLB:
                 model.Add(
                     sum(
                         [
-                            hitters[i] * self.hitter_team_dummies.loc[i, teams[t]]
-                            for i in range(len(hitters))
+                            self.hitters[i] * self.hitter_team_dummies.loc[i, teams[t]]
+                            for i in range(len(self.hitters))
                         ]
                     )
                     >= stack_num * team_stack_var[t]
@@ -433,8 +439,8 @@ class OptimizerMLB:
             model.Add(
                 sum(
                     [
-                        hitters[i] * self.hitter_team_dummies.loc[i, team_stack]
-                        for i in range(len(hitters))
+                        self.hitters[i] * self.hitter_team_dummies.loc[i, team_stack]
+                        for i in range(len(self.hitters))
                     ]
                 )
                 >= stack_num
@@ -445,14 +451,14 @@ class OptimizerMLB:
         model.Maximize(
             sum(
                 [
-                    pitchers[i] * self.pitcher_df.loc[i]["ppg_projection"]
-                    for i in range(len(pitchers))
+                    self.pitchers[i] * self.pitcher_df.loc[i]["ppg_projection"]
+                    for i in range(len(self.pitchers))
                 ]
             )
             + sum(
                 [
-                    hitters[i] * self.hitter_df.loc[i]["ppg_projection"]
-                    for i in range(len(hitters))
+                    self.hitters[i] * self.hitter_df.loc[i]["ppg_projection"]
+                    for i in range(len(self.hitters))
                 ]
             )
         )
@@ -486,15 +492,15 @@ class OptimizerMLB:
 
         # loop through and append player indexes that solver has chosen and
         # also create binary list
-        for j in range(len(pitchers)):
-            if solver.Value(pitchers[j]) == 1:
+        for j in range(len(self.pitchers)):
+            if solver.Value(self.pitchers[j]) == 1:
                 pitcher_indexes_list.append(self.pitcher_df.iloc[j]["index"])
                 binary_pitchers_list.append(1)
             else:
                 binary_pitchers_list.append(0)
 
-        for j in range(len(hitters)):
-            if solver.Value(hitters[j]) == 1:
+        for j in range(len(self.hitters)):
+            if solver.Value(self.hitters[j]) == 1:
                 hitter_indexes_list.append(self.hitter_df.iloc[j]["index"])
                 binary_hitters_list.append(1)
             else:

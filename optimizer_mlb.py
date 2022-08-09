@@ -60,7 +60,7 @@ class OptimizerMLB:
         duals[colname] = duals[colname].str.split("/").str[1]
 
         # append duals back to self.df
-        self.df = self.df.append(duals)
+        self.df = pd.concat([self.df, duals])
 
     def position_bools(self, colname="Position"):
         """Add positional boolean columns to dataframe.
@@ -624,8 +624,12 @@ class OptimizerMLB:
         cols = ["Name + ID", "Position"]
 
         for i in range(len(self.pitcher_indexes)):
-            lineup_df = self.pitcher_df.loc[self.pitcher_indexes[i], cols].append(
-                self.hitter_df.loc[self.hitter_indexes[i], cols]
+
+            lineup_df = pd.concat(
+                [
+                    self.pitcher_df.loc[self.pitcher_indexes[i], cols],
+                    self.hitter_df.loc[self.hitter_indexes[i], cols],
+                ]
             )
 
             # single lineup list

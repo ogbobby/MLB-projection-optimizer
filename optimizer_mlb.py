@@ -353,8 +353,6 @@ class OptimizerMLB:
             have to be completely unique with no single player being the same
             in any lineup.
         """
-        ########## ASSERTIONS AND CREATE MODEL, DECISION VARIABLES ##########
-
         # Make sure lineups is list and variance is in
         assert (
             type(binary_lineups_pitchers) == list
@@ -482,38 +480,38 @@ class OptimizerMLB:
         ################### OUTPUT LIST OF PLAYER INDEXES ###################
 
         # create list to hold player indexes
-        pitcher_indexes_list = []
-        hitter_indexes_list = []
+        pitcher_indexes = []
+        hitter_indexes = []
 
         # Also create binary list of 0 and 1 that is equal len as 'players'
         # decision variable list with 1 being player in lineup and 0 not
-        binary_pitchers_list = []
-        binary_hitters_list = []
+        binary_pitchers = []
+        binary_hitters = []
 
         # loop through and append player indexes that solver has chosen and
         # also create binary list
         for j in range(len(self.pitchers)):
             if solver.Value(self.pitchers[j]) == 1:
-                pitcher_indexes_list.append(self.pitcher_df.iloc[j]["index"])
-                binary_pitchers_list.append(1)
+                pitcher_indexes.append(self.pitcher_df.iloc[j]["index"])
+                binary_pitchers.append(1)
             else:
-                binary_pitchers_list.append(0)
+                binary_pitchers.append(0)
 
         for j in range(len(self.hitters)):
             if solver.Value(self.hitters[j]) == 1:
-                hitter_indexes_list.append(self.hitter_df.iloc[j]["index"])
-                binary_hitters_list.append(1)
+                hitter_indexes.append(self.hitter_df.iloc[j]["index"])
+                binary_hitters.append(1)
             else:
-                binary_hitters_list.append(0)
+                binary_hitters.append(0)
 
-        # return tuple with player index list and binary list
-        # player index list used to more easily read data by linking
-        # back to df
-        # binary lineup list used for variance metric
-        return (
-            (pitcher_indexes_list, hitter_indexes_list),
-            (binary_pitchers_list, binary_hitters_list),
-        )
+        # player indexes used to more easily read data by linking back to df
+        # binary lineups list used for variance metric
+        return {
+            "pitcher_indexes": pitcher_indexes,
+            "hitter_indexes": hitter_indexes,
+            "binary_pitchers": binary_pitchers,
+            "binary_hitters": binary_hitters,
+        }
 
     def run_lineups(
         self,
@@ -568,7 +566,7 @@ class OptimizerMLB:
                 pass
 
         # format data
-        self.transform_data()
+        self.transform_data()  # TODO: move functions outside of class
 
         # create empty lists that will end up as list of lists
         # will create empty lists if not already created
@@ -592,10 +590,10 @@ class OptimizerMLB:
                 variance=variance,
             )
 
-            self.pitcher_indexes.append(lineup[0][0])
-            self.hitter_indexes.append(lineup[0][1])
-            self.binary_lineups_pitchers.append(lineup[1][0])
-            self.binary_lineups_hitters.append(lineup[1][1])
+            self.pitcher_indexes.append(lineup["pitcher_indexes"])
+            self.hitter_indexes.append(lineup["hitter_indexes"])
+            self.binary_lineups_pitchers.append(lineup["binary_pitchers"])
+            self.binary_lineups_hitters.append(lineup["binary_hitters"])
 
             print_num_lineup(num_lineups, i)
 

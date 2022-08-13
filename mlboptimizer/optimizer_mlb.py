@@ -6,15 +6,23 @@ from pandas import DataFrame, concat
 
 
 class OptimizerMLB:
-    """TODO: docstring"""
+    """Class containing methods and attributes related to building and running the
+    constraint programming optimization model.
+    """
 
     def __init__(
-        self, pitchers: DataFrame, hitters: DataFrame, dummies: dict[DataFrame]
+        self, hitters: DataFrame, pitchers: DataFrame, dummies: dict[DataFrame]
     ):
         """
         Parameters
         ----------
-        # TODO: docstring update
+        hitters : DataFrame
+            Hitters data after splitting in ``data_processing.hitter_pitcher_split``.
+        pitchers : DataFrame
+            Pitchers data after splitting in ``data_processing.hitter_pitcher_split``.
+        dummies : dict of DataFrames
+            Dictionary with dummy DataFrames for "hitter_name", "pitcher_opp",
+            "pitcher_game", "hitter_game", and "hitter_team".
         """
         self.pitchers = pitchers.copy()
         self.hitters = hitters.copy()

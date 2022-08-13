@@ -22,7 +22,7 @@ if __name__ == "__main__":
     hitters, pitchers = transform_data(data_dk, data_proj)
     dummies = create_dummy_dfs(hitters, pitchers)
 
-    optimizer = OptimizerMLB(pitchers, hitters, dummies)
+    optimizer = OptimizerMLB(hitters, pitchers, dummies)
 
     # Create x # of auto stacked lineups
     num_lineups = int(input("number of lineups: "))

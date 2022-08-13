@@ -222,9 +222,9 @@ def create_dummy_dfs(hitters: DataFrame, pitchers: DataFrame) -> dict[DataFrame]
     Parameters
     ----------
     hitters : DataFrame
-        Hitters data after splitting in ``data_processing.hitter_pitcher_split()``.
+        Hitters data after splitting in ``data_processing.hitter_pitcher_split``.
     pitchers : DataFrame
-        Pitchers data after splitting in ``data_processing.hitter_pitcher_split()``.
+        Pitchers data after splitting in ``data_processing.hitter_pitcher_split``.
 
     Returns
     -------

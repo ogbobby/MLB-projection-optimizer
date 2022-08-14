@@ -232,16 +232,16 @@ class OptimizerMLB:
             in any lineup.
         """
         # Make sure lineups is list and variance is in
-        assert (
-            type(binary_lineups_pitchers) == list
+        assert isinstance(
+            binary_lineups_pitchers, list
         ), "'binary_lineups_pitchers' type needs to be list"
-        assert (
-            type(binary_lineups_hitters) == list
+        assert isinstance(
+            binary_lineups_hitters, list
         ), "'binary_lineups_hitters' type needs to be list"
-        assert type(variance) == int, "'variance' type needs to be int"
+        assert isinstance(variance, int), "'variance' type needs to be int"
         assert variance >= 0 and variance <= 10, "'variance' must be ≥= 0 and <=10"
         assert (
-            type(team_stack) == str or team_stack is None
+            isinstance(team_stack, str) or team_stack is None
         ), "'team_stack' must be type string or None"
         assert not auto_stack or not team_stack, (
             "At least one of 'auto_stack' and 'team_stack' must be " "False/None."

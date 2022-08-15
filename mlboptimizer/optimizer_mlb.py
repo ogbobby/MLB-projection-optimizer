@@ -182,6 +182,148 @@ class OptimizerMLB:
                 <= 5
             )
 
+    def add_variance_constraint(
+        self,
+        model: cp_model.CpModel,
+        binary_lineups_hitters: list[list[int]],
+        binary_lineups_pitchers: list[list[int]],
+        variance: int,
+    ) -> cp_model.CpModel:
+        """Add variance constraint to model.
+
+        This constraint is the number of players in each new lineup that must be
+        different from any previously created lineup. Uses the combination of indexes
+        from each inner list in both ``binary_lineups_hitters`` and
+        ``binary_lineups_pitchers``to generate new lineup with at least ``variance``
+        number of different players from any previous lineup combination.
+
+        Parameters
+        ----------
+        model : cp_model.CpModel
+        binary_lineups_hitters : list of lists of 0s and 1s
+            List of hitter lineup lists. Each inner lineup list contains 0s and 1s
+            representing if a player at that index is in the lineup or not.
+        binary_lineups_pitchers : list of lists of 0s and 1s
+            List of pitcher lineup lists. Each inner lineup list contains 0s and 1s
+            representing if a player at that index is in the lineup or not.
+        variance : int
+            The min number of players that must be different in every lineup. Uses
+            'binary_lineups' parameters as list of already created lineups to create
+            constraint that each lineup must have ``variance`` number of different
+            players in each lineup. If ``variance=0``, every lineup would be the same
+            as no players would need to be different from previous lineups. If
+            ``variance=10``, then every lineup would have to be completely unique with
+            no single player being the same in any lineup.
+
+        Returns
+        -------
+        cp_model.CpModel
+            Constraint programming``model`` with added "variance" constraint.
+        """
+        # Need to subtract or else `variance` would be number of same players allowed
+        # in each lineup instead of the min number of players that must be different
+        variance = 10 - variance
+
+        # loops through each previous binary lineup and says that the sum of the same
+        # players from lineup (combination of binary hitters and pitchers) cannot be
+        # more than ``variance``
+        for k in range(len(binary_lineups_pitchers)):
+            model.Add(
+                sum(
+                    [
+                        binary_lineups_pitchers[k][i] * self.pitchers_var[i]
+                        for i in range(len(self.pitchers_var))
+                    ]
+                )
+                + sum(
+                    [
+                        binary_lineups_hitters[k][i] * self.hitters_var[i]
+                        for i in range(len(self.hitters_var))
+                    ]
+                )
+                <= variance
+            )
+
+        return model
+
+    def add_autostack_constraint(
+        self, model: cp_model.CpModel, stack_num: int = 4
+    ) -> cp_model.CpModel:
+        """Add auto stacking constraint to model.
+
+        Auto stacking constraint will stack at least ``stack_num`` players from
+        one of the available teams based on the projected points of each available
+        player. This differs from ``self.add_teamstack_constraint`` method because
+        this method does not allow for deciding which team to stack.
+
+        Parameters
+        ----------
+        model : cp_model.CpModel
+        stack_num : int, optional, by default 4
+            Number of players to stack from a single team (team decided by model).
+
+        Returns
+        -------
+        cp_model.CpModel
+            Constraint programming``model`` with added stacking constraint.
+        """
+        # Make each unique team a decision variable
+        # sum(players from single team) >= (stack_num * team_stack_var)
+        teams = self.dummies["hitter_team"].columns
+        team_stack_var = [model.NewBoolVar(teams[i]) for i in range(len(teams))]
+        for t in range(len(teams)):
+            model.Add(
+                sum(
+                    [
+                        self.hitters_var[i]
+                        * self.dummies["hitter_team"].loc[i, teams[t]]
+                        for i in range(len(self.hitters_var))
+                    ]
+                )
+                >= stack_num * team_stack_var[t]
+            )
+        # Forces at least one team to have at least ``stack_num`` players in lineup
+        # `team_stack_var` >= 1
+        model.Add(sum([team_stack_var[i] for i in range(len(team_stack_var))]) >= 1)
+
+        return model
+
+    def add_teamstack_constraint(
+        self, model: cp_model.CpModel, team: str, stack_num: int = 4
+    ) -> cp_model.CpModel:
+        """Add team stacking constraint to ``model``.
+
+        Team stacking constraint forces the optimizer model to put at least
+        ``stack_num`` number of players from the same ``team`` in a single lineup.
+        This differs from ``self.add_autostack_constraint`` method because
+        this method allows for user to decide which team to stack.
+
+        Parameters
+        ----------
+        model : cp_model.CpModel
+        team : str
+            Team to stack. Should be abbreviation based on whatever abbreviations
+            DraftKings uses.
+        stack_num : int, optional, by default 4
+            Number of players from ``team`` to stack.
+
+        Returns
+        -------
+        cp_model.CpModel
+            Constraint programming``model`` with added stacking constraint.
+        """
+        model.Add(
+            sum(
+                [
+                    self.hitters_var[i] * self.dummies["hitter_team"].loc[i, team]
+                    for i in range(len(self.hitters_var))
+                ]
+            )
+            >= stack_num
+        )
+
+        return model
+
     def create_lineup(
         self,
         binary_lineups_pitchers,
@@ -255,73 +397,15 @@ class OptimizerMLB:
         # needed below based on function args
         model = deepcopy(self.model)
 
-        ###################### ADD FLEXIBLE CONSTRAINTS ######################
-
-        # VARIANCE constraint
-        # constraint is the number of players in each new lineup that must
-        # be different from lineups already created. Use 8-variance b/c
-        # just using variance would be the number of same players allowed
-        # in each lineup where lower=more variance and higher=lower variance
-        # but want to have higher number = higher variance and lower =
-        # less varianceS
-        variance = 10 - variance
-
-        # loops through each previous binary lineup ('binary_lineups' is list
-        # of lists of 1s and 0s of previous lineups) and says that the sum
-        # of the same players from lineup in 'binary_lineups' and 'players'
-        # cannot be more than the variance parameter int
-        # if variance parameter was 0 then no lineup would be different
-        # because all 8 players could be the same, if it was 8 then no
-        # lineup could have the same player
-        for k in range(len(binary_lineups_pitchers)):
-            model.Add(
-                sum(
-                    [
-                        binary_lineups_pitchers[k][i] * self.pitchers_var[i]
-                        for i in range(len(self.pitchers_var))
-                    ]
-                )
-                + sum(
-                    [
-                        binary_lineups_hitters[k][i] * self.hitters_var[i]
-                        for i in range(len(self.hitters_var))
-                    ]
-                )
-                <= variance
-            )
-
-        # STACKING constraint - auto stack, no input on specific teams to stack
-        # make each unique team a decision variable
-        # sum(players from single team) >= (stack_num * team_stack_var)
-        #
-        # team_stack_var >= 1  # at least one stack
-        # forces at least one team to have 4 players in lineup
+        # Add flexible constraints that do not need to be across ALL models
+        model = self.add_variance_constraint(
+            model, binary_lineups_hitters, binary_lineups_pitchers, variance=variance
+        )
         if auto_stack:
-            teams = self.dummies["hitter_team"].columns
-            team_stack_var = [model.NewBoolVar(teams[i]) for i in range(len(teams))]
-            for t in range(len(teams)):
-                model.Add(
-                    sum(
-                        [
-                            self.hitters_var[i]
-                            * self.dummies["hitter_team"].loc[i, teams[t]]
-                            for i in range(len(self.hitters_var))
-                        ]
-                    )
-                    >= stack_num * team_stack_var[t]
-                )
-            model.Add(sum([team_stack_var[i] for i in range(len(team_stack_var))]) >= 1)
-
+            model = self.add_autostack_constraint(model, stack_num)
         if team_stack:
-            model.Add(
-                sum(
-                    [
-                        self.hitters_var[i]
-                        * self.dummies["hitter_team"].loc[i, team_stack]
-                        for i in range(len(self.hitters_var))
-                    ]
-                )
-                >= stack_num
+            model = self.add_teamstack_constraint(
+                model, team=team_stack, stack_num=stack_num
             )
 
         ######################## SOLVE MODEL ########################

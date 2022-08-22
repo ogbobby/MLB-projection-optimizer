@@ -389,7 +389,7 @@ class OptimizerMLB:
             self.add_model_constraints()
         model = deepcopy(self.model)
 
-        # Add flexible constraints
+        # Flexible constraints
         model = self.add_variance_constraint(
             model, binary_lineups_hitters, binary_lineups_pitchers, variance=variance
         )
@@ -400,38 +400,8 @@ class OptimizerMLB:
                 model, team=team_stack, stack_num=stack_num
             )
 
-        ######################## SOLVE MODEL ########################
-
-        model.Maximize(
-            sum(
-                [
-                    self.pitchers_var[i] * self.pitchers.loc[i]["ppg_projection"]
-                    for i in range(len(self.pitchers_var))
-                ]
-            )
-            + sum(
-                [
-                    self.hitters_var[i] * self.hitters.loc[i]["ppg_projection"]
-                    for i in range(len(self.hitters_var))
-                ]
-            )
-        )
-
-        solver = cp_model.CpSolver()
-        status = solver.Solve(model)
-
-        # if not optimal, print the status and return None
-        if status == cp_model.OPTIMAL:
-            pass
-        elif status == cp_model.FEASIBLE:
-            print("Feasible")
-            return None
-        elif status == cp_model.INFEASIBLE:
-            print("Infeasible")
-            return None
-        elif status == cp_model.MODEL_INVALID:
-            print("Model Invalid")
-            return None
+        # SOLVE
+        solver = self.solve_model(model)
 
         ################### OUTPUT LIST OF PLAYER INDEXES ###################
 
@@ -490,6 +460,38 @@ class OptimizerMLB:
         assert (
             kwargs["stack_num"] >= 0 and kwargs["stack_num"] <= 5
         ), "'stack_num' must be >= 0 and <= 5"
+
+    def solve_model(self, model: cp_model.CpModel) -> cp_model.CpSolver or None:
+        model.Maximize(
+            sum(
+                [
+                    self.pitchers_var[i] * self.pitchers.loc[i]["ppg_projection"]
+                    for i in range(len(self.pitchers_var))
+                ]
+            )
+            + sum(
+                [
+                    self.hitters_var[i] * self.hitters.loc[i]["ppg_projection"]
+                    for i in range(len(self.hitters_var))
+                ]
+            )
+        )
+
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+
+        # if not optimal, print the status and return None
+        if status == cp_model.OPTIMAL:
+            return solver
+        elif status == cp_model.FEASIBLE:
+            print("Feasible")
+            return None
+        elif status == cp_model.INFEASIBLE:
+            print("Infeasible")
+            return None
+        elif status == cp_model.MODEL_INVALID:
+            print("Model Invalid")
+            return None
 
     def run_lineups(
         self,

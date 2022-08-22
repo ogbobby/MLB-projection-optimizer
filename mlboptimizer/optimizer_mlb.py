@@ -403,41 +403,9 @@ class OptimizerMLB:
         # SOLVE
         solver = self.solve_model(model)
 
-        ################### OUTPUT LIST OF PLAYER INDEXES ###################
-
-        # create list to hold player indexes
-        pitcher_indexes = []
-        hitter_indexes = []
-
-        # Also create binary list of 0 and 1 that is equal len as 'players'
-        # decision variable list with 1 being player in lineup and 0 not
-        binary_pitchers = []
-        binary_hitters = []
-
-        # loop through and append player indexes that solver has chosen and
-        # also create binary list
-        for j in range(len(self.pitchers_var)):
-            if solver.Value(self.pitchers_var[j]) == 1:
-                pitcher_indexes.append(self.pitchers.iloc[j]["index"])
-                binary_pitchers.append(1)
-            else:
-                binary_pitchers.append(0)
-
-        for j in range(len(self.hitters_var)):
-            if solver.Value(self.hitters_var[j]) == 1:
-                hitter_indexes.append(self.hitters.iloc[j]["index"])
-                binary_hitters.append(1)
-            else:
-                binary_hitters.append(0)
-
-        # player indexes used to more easily read data by linking back to df
-        # binary lineups list used for variance metric
-        return {
-            "pitcher_indexes": pitcher_indexes,
-            "hitter_indexes": hitter_indexes,
-            "binary_pitchers": binary_pitchers,
-            "binary_hitters": binary_hitters,
-        }
+        # Returns dict of lists - Keys:
+        # {"pitcher_indexes", "hitter_indexes", "binary_pitchers", "binary_hitters"}
+        return self.output_lineup(solver)
 
     def _check_create_lineup_args(self, **kwargs):
         # Make sure lineups is list and variance is in
@@ -492,6 +460,39 @@ class OptimizerMLB:
         elif status == cp_model.MODEL_INVALID:
             print("Model Invalid")
             return None
+
+    def output_lineup(self, solver: cp_model.CpSolver) -> dict[list]:
+
+        pitcher_indexes = []
+        hitter_indexes = []
+
+        # Binary lists of decision variable results (1 = in lineup, 0 = not in lineup)
+        binary_pitchers = []
+        binary_hitters = []
+
+        # Append player indexes that solver has chosen and create binary list
+        for j in range(len(self.pitchers_var)):
+            if solver.Value(self.pitchers_var[j]) == 1:
+                pitcher_indexes.append(self.pitchers.iloc[j]["index"])
+                binary_pitchers.append(1)
+            else:
+                binary_pitchers.append(0)
+
+        for j in range(len(self.hitters_var)):
+            if solver.Value(self.hitters_var[j]) == 1:
+                hitter_indexes.append(self.hitters.iloc[j]["index"])
+                binary_hitters.append(1)
+            else:
+                binary_hitters.append(0)
+
+        # Player indexes used to link back to df and get player IDs
+        # Binary lineups list used for variance metric
+        return {
+            "pitcher_indexes": pitcher_indexes,
+            "hitter_indexes": hitter_indexes,
+            "binary_pitchers": binary_pitchers,
+            "binary_hitters": binary_hitters,
+        }
 
     def run_lineups(
         self,

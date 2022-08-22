@@ -326,20 +326,19 @@ class OptimizerMLB:
 
     def create_lineup(
         self,
-        binary_lineups_pitchers,
-        binary_lineups_hitters,
-        auto_stack=False,
-        team_stack=None,
-        stack_num=4,
-        variance=0,
-    ):
+        binary_lineups_pitchers: list,
+        binary_lineups_hitters: list,
+        auto_stack: bool = False,
+        team_stack: bool or None = None,
+        stack_num: int = 4,
+        variance: int = 0,
+    ) -> dict[list]:
         """Create and runs optimization model.
 
-        Returns tuple of two lists - (player_indexes_list, binary_lineup_list).
-        The player index list is just a list with each of the 8 player indexes
-        of the players selected by the optimizer. The binary lineup list is a
-        list of 1s and 0s with a 1 indicating a player is in the lineup and 0
-        being the player is not.
+        Returns data for pitcher/hitter indexes and pitcher/hitter binary lists. The
+        index data is used to link back the players selected in lineup to the dataframe
+        holding each player's DraftKings information for later output to csv. The binary
+        pitcher/hitter lists are used to create variance in each lineup.
 
         Parameters
         ----------
@@ -372,6 +371,13 @@ class OptimizerMLB:
             from previous lineups. If parameter=10, then every lineup would
             have to be completely unique with no single player being the same
             in any lineup.
+
+        Returns
+        -------
+        dict of lists
+            Dictionary with 4 keys, each corresponding to a different list of data.
+            Dictionary keys are:
+            {"pitcher_indexes", "hitter_indexes", "binary_pitchers", "binary_hitters"}
         """
         self._check_create_lineup_args(
             binary_lineups_pitchers=binary_lineups_pitchers,
@@ -408,6 +414,9 @@ class OptimizerMLB:
         return self.output_lineup(solver)
 
     def _check_create_lineup_args(self, **kwargs):
+        """Run assertion statements to ensure inputs to ``self.create_lineup()`` are
+        correct.
+        """
         # Make sure lineups is list and variance is in
         assert isinstance(
             kwargs["binary_lineups_pitchers"], list
@@ -430,6 +439,20 @@ class OptimizerMLB:
         ), "'stack_num' must be >= 0 and <= 5"
 
     def solve_model(self, model: cp_model.CpModel) -> cp_model.CpSolver or None:
+        """Solve to constraint programming model.
+
+        Should be run after all constraints are added to the ``model``.
+
+        Parameters
+        ----------
+        model : cp_model.CpModel
+
+        Returns
+        -------
+        cp_model.CpSolver or None
+            If solver finds and optimal solution, the ``CpSolver`` object will be returned,
+            otherwise will return ``None``
+        """
         model.Maximize(
             sum(
                 [
@@ -462,7 +485,21 @@ class OptimizerMLB:
             return None
 
     def output_lineup(self, solver: cp_model.CpSolver) -> dict[list]:
+        """Return metadata for lineup based on ``solver`` solution.
 
+        Parameters
+        ----------
+        solver : cp_model.CpSolver
+
+        Returns
+        -------
+        dict of lists
+            Dictionary contains 4 keys, each corresponding to player indexes or binary
+            data. The player indexes are used to link back to the dataframe containing
+            detailed information such as player ID, for later output to csv. The binary
+            data is used to keep track of each lineup and create variance in each during
+            the ``self.create_lineup`` method.
+        """
         pitcher_indexes = []
         hitter_indexes = []
 

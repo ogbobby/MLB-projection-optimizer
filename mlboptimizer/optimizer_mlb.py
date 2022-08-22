@@ -28,7 +28,121 @@ class OptimizerMLB:
         self.hitters = hitters.copy()
         self.dummies = dummies.copy()
 
-    def create_model(self):
+    def create_lineup(
+        self,
+        binary_lineups_pitchers: list,
+        binary_lineups_hitters: list,
+        auto_stack: bool = False,
+        team_stack: bool or None = None,
+        stack_num: int = 4,
+        variance: int = 0,
+    ) -> dict[list]:
+        """Create and runs optimization model.
+
+        Returns data for pitcher/hitter indexes and pitcher/hitter binary lists. The
+        index data is used to link back the players selected in lineup to the dataframe
+        holding each player's DraftKings information for later output to csv. The binary
+        pitcher/hitter lists are used to create variance in each lineup.
+
+        Parameters
+        ----------
+        binary_lineups_pitchers : list
+            List of binary pitcher lineups with 1s and 0s for players who are
+            in or out of lineup. Used with 'variance' parameter to output
+            unique lineups.
+        binary_lineups_hitters : list
+            Same as *binary_lineups_pitchers* but with list representing
+            hitters.
+        auto_stack : bool, default False
+            If True, force lineup to include at least 4 players from same team.
+            *team_stack* must be None if *auto_stack* is True.
+        team_stack : str, default None
+            Team abbreviation to stack at least *stack_num* number of
+            players from. *auto_stack* must be False if this is not None.
+        stack_num : int, default 4, must be between 0 and 5 (inclusive)
+            Minimum number of players to be stacked from at least one team.
+            Only applied if either *auto_stack* is True or *team_stack* is not
+            None. If *auto_stack* is True, the team that is stacked will be
+            selected by algotithm. If *team_stack* is specified, this will be
+            the minimum number of players from the specified team to be included
+            in the lineup.
+        variance : int, default 0, Max=10, Min=0
+            The min number of players that must be different in every lineup.
+            Uses 'binary_lineups' parameter as list of already created lineups
+            and creates constraint that each lineup must have 'variance'
+            number of different players in each lineup. If parameter=0, every
+            lineup would be the same as no players would need to be different
+            from previous lineups. If parameter=10, then every lineup would
+            have to be completely unique with no single player being the same
+            in any lineup.
+
+        Returns
+        -------
+        dict of lists
+            Dictionary with 4 keys, each corresponding to a different list of data.
+            Dictionary keys are:
+            {"pitcher_indexes", "hitter_indexes", "binary_pitchers", "binary_hitters"}
+        """
+        self._check_create_lineup_args(
+            binary_lineups_pitchers=binary_lineups_pitchers,
+            binary_lineups_hitters=binary_lineups_hitters,
+            auto_stack=auto_stack,
+            team_stack=team_stack,
+            stack_num=stack_num,
+            variance=variance,
+        )
+
+        # Start with copy of model with constant constraints and add flexible ones as
+        # needed below based on function args
+        if not hasattr(self, "model"):
+            self._create_model()
+            self._add_model_constraints()
+        model = deepcopy(self.model)
+
+        # Flexible constraints
+        model = self._add_variance_constraint(
+            model, binary_lineups_hitters, binary_lineups_pitchers, variance=variance
+        )
+        if auto_stack:
+            model = self._add_autostack_constraint(model, stack_num)
+        if team_stack:
+            model = self._add_teamstack_constraint(
+                model, team=team_stack, stack_num=stack_num
+            )
+
+        # SOLVE
+        solver = self._solve_model(model)
+
+        # Returns dict of lists - Keys:
+        # {"pitcher_indexes", "hitter_indexes", "binary_pitchers", "binary_hitters"}
+        return self._output_lineup(solver)
+
+    def _check_create_lineup_args(self, **kwargs):
+        """Run assertion statements to ensure inputs to ``self.create_lineup()`` are
+        correct.
+        """
+        # Make sure lineups is list and variance is in
+        assert isinstance(
+            kwargs["binary_lineups_pitchers"], list
+        ), "'binary_lineups_pitchers' type needs to be list"
+        assert isinstance(
+            kwargs["binary_lineups_hitters"], list
+        ), "'binary_lineups_hitters' type needs to be list"
+        assert isinstance(kwargs["variance"], int), "'variance' type needs to be int"
+        assert (
+            kwargs["variance"] >= 0 and kwargs["variance"] <= 10
+        ), "'variance' must be ≥= 0 and <=10"
+        assert (
+            isinstance(kwargs["team_stack"], str) or kwargs["team_stack"] is None
+        ), "'team_stack' must be type string or None"
+        assert not kwargs["auto_stack"] or not kwargs["team_stack"], (
+            "At least one of 'auto_stack' and 'team_stack' must be " "False/None."
+        )
+        assert (
+            kwargs["stack_num"] >= 0 and kwargs["stack_num"] <= 5
+        ), "'stack_num' must be >= 0 and <= 5"
+
+    def _create_model(self):
         """Create the Constraint Programming model object and decision variables."""
         self.model = cp_model.CpModel()
 
@@ -42,7 +156,7 @@ class OptimizerMLB:
             for i in range(len(self.hitters))
         ]
 
-    def add_model_constraints(self):
+    def _add_model_constraints(self):
         """Add constraints to ``self.model`` that are constant across all lineups."""
         # NUMBER PLAYERS constraint
         # Also doubles as an All Different constraint b/c 10 unique players
@@ -182,7 +296,7 @@ class OptimizerMLB:
                 <= 5
             )
 
-    def add_variance_constraint(
+    def _add_variance_constraint(
         self,
         model: cp_model.CpModel,
         binary_lineups_hitters: list[list[int]],
@@ -246,7 +360,7 @@ class OptimizerMLB:
 
         return model
 
-    def add_autostack_constraint(
+    def _add_autostack_constraint(
         self, model: cp_model.CpModel, stack_num: int = 4
     ) -> cp_model.CpModel:
         """Add auto stacking constraint to model.
@@ -288,7 +402,7 @@ class OptimizerMLB:
 
         return model
 
-    def add_teamstack_constraint(
+    def _add_teamstack_constraint(
         self, model: cp_model.CpModel, team: str, stack_num: int = 4
     ) -> cp_model.CpModel:
         """Add team stacking constraint to ``model``.
@@ -324,121 +438,7 @@ class OptimizerMLB:
 
         return model
 
-    def create_lineup(
-        self,
-        binary_lineups_pitchers: list,
-        binary_lineups_hitters: list,
-        auto_stack: bool = False,
-        team_stack: bool or None = None,
-        stack_num: int = 4,
-        variance: int = 0,
-    ) -> dict[list]:
-        """Create and runs optimization model.
-
-        Returns data for pitcher/hitter indexes and pitcher/hitter binary lists. The
-        index data is used to link back the players selected in lineup to the dataframe
-        holding each player's DraftKings information for later output to csv. The binary
-        pitcher/hitter lists are used to create variance in each lineup.
-
-        Parameters
-        ----------
-        binary_lineups_pitchers : list
-            List of binary pitcher lineups with 1s and 0s for players who are
-            in or out of lineup. Used with 'variance' parameter to output
-            unique lineups.
-        binary_lineups_hitters : list
-            Same as *binary_lineups_pitchers* but with list representing
-            hitters.
-        auto_stack : bool, default False
-            If True, force lineup to include at least 4 players from same team.
-            *team_stack* must be None if *auto_stack* is True.
-        team_stack : str, default None
-            Team abbreviation to stack at least *stack_num* number of
-            players from. *auto_stack* must be False if this is not None.
-        stack_num : int, default 4, must be between 0 and 5 (inclusive)
-            Minimum number of players to be stacked from at least one team.
-            Only applied if either *auto_stack* is True or *team_stack* is not
-            None. If *auto_stack* is True, the team that is stacked will be
-            selected by algotithm. If *team_stack* is specified, this will be
-            the minimum number of players from the specified team to be included
-            in the lineup.
-        variance : int, default 0, Max=10, Min=0
-            The min number of players that must be different in every lineup.
-            Uses 'binary_lineups' parameter as list of already created lineups
-            and creates constraint that each lineup must have 'variance'
-            number of different players in each lineup. If parameter=0, every
-            lineup would be the same as no players would need to be different
-            from previous lineups. If parameter=10, then every lineup would
-            have to be completely unique with no single player being the same
-            in any lineup.
-
-        Returns
-        -------
-        dict of lists
-            Dictionary with 4 keys, each corresponding to a different list of data.
-            Dictionary keys are:
-            {"pitcher_indexes", "hitter_indexes", "binary_pitchers", "binary_hitters"}
-        """
-        self._check_create_lineup_args(
-            binary_lineups_pitchers=binary_lineups_pitchers,
-            binary_lineups_hitters=binary_lineups_hitters,
-            auto_stack=auto_stack,
-            team_stack=team_stack,
-            stack_num=stack_num,
-            variance=variance,
-        )
-
-        # Start with copy of model with constant constraints and add flexible ones as
-        # needed below based on function args
-        if not hasattr(self, "model"):
-            self.create_model()
-            self.add_model_constraints()
-        model = deepcopy(self.model)
-
-        # Flexible constraints
-        model = self.add_variance_constraint(
-            model, binary_lineups_hitters, binary_lineups_pitchers, variance=variance
-        )
-        if auto_stack:
-            model = self.add_autostack_constraint(model, stack_num)
-        if team_stack:
-            model = self.add_teamstack_constraint(
-                model, team=team_stack, stack_num=stack_num
-            )
-
-        # SOLVE
-        solver = self.solve_model(model)
-
-        # Returns dict of lists - Keys:
-        # {"pitcher_indexes", "hitter_indexes", "binary_pitchers", "binary_hitters"}
-        return self.output_lineup(solver)
-
-    def _check_create_lineup_args(self, **kwargs):
-        """Run assertion statements to ensure inputs to ``self.create_lineup()`` are
-        correct.
-        """
-        # Make sure lineups is list and variance is in
-        assert isinstance(
-            kwargs["binary_lineups_pitchers"], list
-        ), "'binary_lineups_pitchers' type needs to be list"
-        assert isinstance(
-            kwargs["binary_lineups_hitters"], list
-        ), "'binary_lineups_hitters' type needs to be list"
-        assert isinstance(kwargs["variance"], int), "'variance' type needs to be int"
-        assert (
-            kwargs["variance"] >= 0 and kwargs["variance"] <= 10
-        ), "'variance' must be ≥= 0 and <=10"
-        assert (
-            isinstance(kwargs["team_stack"], str) or kwargs["team_stack"] is None
-        ), "'team_stack' must be type string or None"
-        assert not kwargs["auto_stack"] or not kwargs["team_stack"], (
-            "At least one of 'auto_stack' and 'team_stack' must be " "False/None."
-        )
-        assert (
-            kwargs["stack_num"] >= 0 and kwargs["stack_num"] <= 5
-        ), "'stack_num' must be >= 0 and <= 5"
-
-    def solve_model(self, model: cp_model.CpModel) -> cp_model.CpSolver or None:
+    def _solve_model(self, model: cp_model.CpModel) -> cp_model.CpSolver or None:
         """Solve to constraint programming model.
 
         Should be run after all constraints are added to the ``model``.
@@ -484,7 +484,7 @@ class OptimizerMLB:
             print("Model Invalid")
             return None
 
-    def output_lineup(self, solver: cp_model.CpSolver) -> dict[list]:
+    def _output_lineup(self, solver: cp_model.CpSolver) -> dict[list]:
         """Return metadata for lineup based on ``solver`` solution.
 
         Parameters

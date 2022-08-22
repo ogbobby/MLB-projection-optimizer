@@ -373,31 +373,23 @@ class OptimizerMLB:
             have to be completely unique with no single player being the same
             in any lineup.
         """
-        # Make sure lineups is list and variance is in
-        assert isinstance(
-            binary_lineups_pitchers, list
-        ), "'binary_lineups_pitchers' type needs to be list"
-        assert isinstance(
-            binary_lineups_hitters, list
-        ), "'binary_lineups_hitters' type needs to be list"
-        assert isinstance(variance, int), "'variance' type needs to be int"
-        assert variance >= 0 and variance <= 10, "'variance' must be ≥= 0 and <=10"
-        assert (
-            isinstance(team_stack, str) or team_stack is None
-        ), "'team_stack' must be type string or None"
-        assert not auto_stack or not team_stack, (
-            "At least one of 'auto_stack' and 'team_stack' must be " "False/None."
+        self._check_create_lineup_args(
+            binary_lineups_pitchers=binary_lineups_pitchers,
+            binary_lineups_hitters=binary_lineups_hitters,
+            auto_stack=auto_stack,
+            team_stack=team_stack,
+            stack_num=stack_num,
+            variance=variance,
         )
-        assert stack_num >= 0 and stack_num <= 5, "'stack_num' must be >= 0 and <= 5"
 
+        # Start with copy of model with constant constraints and add flexible ones as
+        # needed below based on function args
         if not hasattr(self, "model"):
             self.create_model()
             self.add_model_constraints()
-        # Start with copy of model with constant constraints and add flexible ones as
-        # needed below based on function args
         model = deepcopy(self.model)
 
-        # Add flexible constraints that do not need to be across ALL models
+        # Add flexible constraints
         model = self.add_variance_constraint(
             model, binary_lineups_hitters, binary_lineups_pitchers, variance=variance
         )
@@ -476,6 +468,28 @@ class OptimizerMLB:
             "binary_pitchers": binary_pitchers,
             "binary_hitters": binary_hitters,
         }
+
+    def _check_create_lineup_args(self, **kwargs):
+        # Make sure lineups is list and variance is in
+        assert isinstance(
+            kwargs["binary_lineups_pitchers"], list
+        ), "'binary_lineups_pitchers' type needs to be list"
+        assert isinstance(
+            kwargs["binary_lineups_hitters"], list
+        ), "'binary_lineups_hitters' type needs to be list"
+        assert isinstance(kwargs["variance"], int), "'variance' type needs to be int"
+        assert (
+            kwargs["variance"] >= 0 and kwargs["variance"] <= 10
+        ), "'variance' must be ≥= 0 and <=10"
+        assert (
+            isinstance(kwargs["team_stack"], str) or kwargs["team_stack"] is None
+        ), "'team_stack' must be type string or None"
+        assert not kwargs["auto_stack"] or not kwargs["team_stack"], (
+            "At least one of 'auto_stack' and 'team_stack' must be " "False/None."
+        )
+        assert (
+            kwargs["stack_num"] >= 0 and kwargs["stack_num"] <= 5
+        ), "'stack_num' must be >= 0 and <= 5"
 
     def run_lineups(
         self,

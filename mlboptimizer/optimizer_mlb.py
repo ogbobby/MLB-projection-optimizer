@@ -28,6 +28,13 @@ class OptimizerMLB:
         self.hitters = hitters.copy()
         self.dummies = dummies.copy()
 
+        # Attributes used to hold created lineup metadata
+        # Empty until calling the ``self.run_lineups`` method
+        self.pitcher_indexes = []
+        self.hitter_indexes = []
+        self.binary_lineups_pitchers = []
+        self.binary_lineups_hitters = []
+
     def create_lineup(
         self,
         binary_lineups_pitchers: list,
@@ -51,19 +58,19 @@ class OptimizerMLB:
             in or out of lineup. Used with 'variance' parameter to output
             unique lineups.
         binary_lineups_hitters : list
-            Same as *binary_lineups_pitchers* but with list representing
+            Same as ``binary_lineups_pitchers`` but with list representing
             hitters.
         auto_stack : bool, default False
             If True, force lineup to include at least 4 players from same team.
-            *team_stack* must be None if *auto_stack* is True.
+            ``team_stack`` must be None if ``auto_stack`` is True.
         team_stack : str, default None
-            Team abbreviation to stack at least *stack_num* number of
-            players from. *auto_stack* must be False if this is not None.
+            Team abbreviation to stack at least ``stack_num`` number of
+            players from. ``auto_stack`` must be False if this is not None.
         stack_num : int, default 4, must be between 0 and 5 (inclusive)
             Minimum number of players to be stacked from at least one team.
-            Only applied if either *auto_stack* is True or *team_stack* is not
-            None. If *auto_stack* is True, the team that is stacked will be
-            selected by algotithm. If *team_stack* is specified, this will be
+            Only applied if either ``auto_stack`` is True or ``team_stack`` is not
+            None. If ``auto_stack`` is True, the team that is stacked will be
+            selected by algotithm. If ``team_stack`` is specified, this will be
             the minimum number of players from the specified team to be included
             in the lineup.
         variance : int, default 0, Max=10, Min=0
@@ -533,14 +540,14 @@ class OptimizerMLB:
 
     def run_lineups(
         self,
-        num_lineups,
-        auto_stack=False,
-        team_stack=None,
-        stack_num=4,
-        variance=0,
-        print_progress=False,
-    ):
-        """Create 'num_lineups' number of lineups using the self.create_lineup()
+        num_lineups: int,
+        auto_stack: bool = False,
+        team_stack: str = None,
+        stack_num: int = 4,
+        variance: int = 0,
+        print_progress: bool = False,
+    ) -> None:
+        """Create 'num_lineups' number of lineups using the ``self.create_lineup``
         method.
 
         Parameters
@@ -548,19 +555,19 @@ class OptimizerMLB:
         num_lineups : int
             Number of lineups to create.
         auto_stack : bool, default False
-            If True, force lineup to include at least 4 players from same team.
-            *team_stack* must be None if *auto_stack* is True.
+            If True, force each lineup to include at least 4 players from same team.
+            ``team_stack`` must be None if ``auto_stack`` is True.
         team_stack : str, default None
-            Team abbreviation to stack at least *stack_num* number of
-            players from. *auto_stack* must be False if this is not None.
+            Team abbreviation to stack at least ``stack_num`` number of
+            players from. ``auto_stack`` must be False if this is not None.
         stack_num : int, default 4, must be between 0 and 5 (inclusive)
-            If *team_stack* is not None, lineup must have at least this number
-            of hitters from team *team_stack*. If this number is 0 then no
-            players from *team_stack* will be included in lineup.
+            If ``team_stack`` is not None, lineup must have at least this number
+            of hitters from team ``team_stack``. If this number is 0 then no
+            players from ``team_stack`` will be included in lineup.
         variance : int, default 0, Max=10, Min=0
             The min number of players that must be different in every lineup.
-            Uses 'binary_lineups' parameter as list of already created lineups
-            and creates constraint that each lineup must have 'variance'
+            Uses ``binary_lineups`` parameter as list of already created lineups
+            and creates constraint that each lineup must have ``variance``
             number of different players in each lineup. If parameter=0, every
             lineup would be the same as no players would need to be different
             from previous lineups. If parameter=10, then every lineup would
@@ -571,30 +578,10 @@ class OptimizerMLB:
 
         Returns
         -------
-        Creates attributes for 'pitcher_indexes', 'hitter_indexes',
-        'binary_lineups_pitchers', 'binary_lineups_hitters' if not already
-        created. If attributes already created function will create new lineups
-        building upon those already created.
+        None
+            Created lineup metadata is held in instance attributes ``pitcher_indexes``,
+            ``hitter_indexes``, ``binary_lineups_pitchers``, ``binary_lineups_hitters``.
         """
-
-        def print_num_lineup(num_lineups, i):
-            if print_progress:
-                print(i + 1, "/", num_lineups, sep=" ")
-            else:
-                pass
-
-        # create empty lists that will end up as list of lists
-        # will create empty lists if not already created
-        if not hasattr(self, "pitcher_indexes"):
-            self.pitcher_indexes = []
-        if not hasattr(self, "hitter_indexes"):
-            self.hitter_indexes = []
-        if not hasattr(self, "binary_lineups_pitchers"):
-            self.binary_lineups_pitchers = []
-        if not hasattr(self, "binary_lineups_hitters"):
-            self.binary_lineups_hitters = []
-
-        ## Create lineups ##
         for i in range(num_lineups):
             lineup = self.create_lineup(
                 self.binary_lineups_pitchers,
@@ -610,9 +597,10 @@ class OptimizerMLB:
             self.binary_lineups_pitchers.append(lineup["binary_pitchers"])
             self.binary_lineups_hitters.append(lineup["binary_hitters"])
 
-            print_num_lineup(num_lineups, i)
+            if print_progress:
+                print(i + 1, "/", num_lineups, sep=" ")
 
-        print("COMPLETE")
+        print("COMPLETE") if print_progress else None
 
     def csv_output(self, filename):
         """Output csv file of lineups using the self.pitcher_indexes and

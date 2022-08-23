@@ -602,7 +602,7 @@ class OptimizerMLB:
 
         print("COMPLETE") if print_progress else None
 
-    def csv_output(self, filename):
+    def csv_output(self, filename: str) -> list[list]:
         """Output csv file of lineups using the self.pitcher_indexes and
         self.hitter_indexes attributes and can be uploaded to Draftkings site.
 
@@ -611,59 +611,66 @@ class OptimizerMLB:
         filename : str
             Name of output csv file.
         """
-        assert len(self.pitcher_indexes) == len(self.hitter_indexes), (
-            "length of pitcher_indexes and hitter_indexes attributes must be " "equal."
-        )
-        assert (
-            type(self.pitcher_indexes) == list
-        ), "pitcher_indexes attribute must be list."
-        assert (
-            type(self.hitter_indexes) == list
-        ), "hitter_indexes attribute must be list."
+        assert len(self.pitcher_indexes) == len(
+            self.hitter_indexes
+        ), "length of pitcher_indexes and hitter_indexes attributes must be equal."
 
+        uploadable_lineups = self.read_lineup_metadata()
+
+        with open(filename, "w") as csvFile:
+            writer = csv.writer(csvFile)
+            writer.writerows(uploadable_lineups)
+            csvFile.close()
+
+        return "Complete"
+
+    def read_lineup_metadata(self):
+        """Read lineup metadata into uploadable CSV format.
+
+        Returns
+        -------
+        list of lists
+            List of individual lineup lists. Each individual lineup list created using
+            the ``self._to_readable_list`` method.
+        """
         uploadable_lineups = [["P", "P", "C", "1B", "2B", "3B", "SS", "OF", "OF", "OF"]]
         cols = ["Name + ID", "Position"]
 
         for i in range(len(self.pitcher_indexes)):
-
             lineup_df = concat(
                 [
                     self.pitchers.loc[self.pitcher_indexes[i], cols],
                     self.hitters.loc[self.hitter_indexes[i], cols],
                 ]
             )
-
-            # single lineup list
-            lineup_list = []
-
-            lineup_list.extend(
-                lineup_df[lineup_df["Position"].str.contains("P")]["Name + ID"].values
-            )
-            lineup_list.extend(
-                lineup_df[lineup_df["Position"] == "C"]["Name + ID"].values
-            )
-            lineup_list.extend(
-                lineup_df[lineup_df["Position"] == "1B"]["Name + ID"].values
-            )
-            lineup_list.extend(
-                lineup_df[lineup_df["Position"] == "2B"]["Name + ID"].values
-            )
-            lineup_list.extend(
-                lineup_df[lineup_df["Position"] == "3B"]["Name + ID"].values
-            )
-            lineup_list.extend(
-                lineup_df[lineup_df["Position"] == "SS"]["Name + ID"].values
-            )
-            lineup_list.extend(
-                lineup_df[lineup_df["Position"] == "OF"]["Name + ID"].values
-            )
-
+            lineup_list = self._to_readable_list(lineup_df)
             uploadable_lineups.append(lineup_list)
 
-        with open(filename, "w") as csvFile:
-            writer = csv.writer(csvFile)
-            writer.writerows(uploadable_lineups)
+        return uploadable_lineups
 
-            csvFile.close()
+    def _to_readable_list(self, df: DataFrame) -> list[str]:
+        """Turn ``df`` of players in lineup into list of player IDs.
 
-        return "Complete"
+        CSV file needs to be in this format to get uploaded correctly to DraftKings.
+
+        Parameters
+        ----------
+        df : DataFrame
+            Lineup of 10 players.
+
+        Returns
+        -------
+        list
+            Players "Name + ID" ordered according to the template needed to upload data
+            to DraftKings site.
+        """
+        lineup_list = []
+        lineup_list.extend(df[df["Position"].str.contains("P")]["Name + ID"].values)
+        lineup_list.extend(df[df["Position"] == "C"]["Name + ID"].values)
+        lineup_list.extend(df[df["Position"] == "1B"]["Name + ID"].values)
+        lineup_list.extend(df[df["Position"] == "2B"]["Name + ID"].values)
+        lineup_list.extend(df[df["Position"] == "3B"]["Name + ID"].values)
+        lineup_list.extend(df[df["Position"] == "SS"]["Name + ID"].values)
+        lineup_list.extend(df[df["Position"] == "OF"]["Name + ID"].values)
+
+        return lineup_list

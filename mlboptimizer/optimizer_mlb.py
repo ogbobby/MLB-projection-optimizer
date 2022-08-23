@@ -35,6 +35,69 @@ class OptimizerMLB:
         self.binary_lineups_pitchers = []
         self.binary_lineups_hitters = []
 
+    def run_lineups(
+        self,
+        num_lineups: int,
+        auto_stack: bool = False,
+        team_stack: str = None,
+        stack_num: int = 4,
+        variance: int = 0,
+        print_progress: bool = False,
+    ) -> None:
+        """Create multiple lineups using the ``self.create_lineup`` method.
+
+        Parameters
+        ----------
+        num_lineups : int
+            Number of lineups to create.
+        auto_stack : bool, default False
+            If True, force each lineup to include at least 4 players from same team.
+            ``team_stack`` must be None if ``auto_stack`` is True.
+        team_stack : str, default None
+            Team abbreviation to stack at least ``stack_num`` number of
+            players from. ``auto_stack`` must be False if this is not None.
+        stack_num : int, default 4, must be between 0 and 5 (inclusive)
+            If ``team_stack`` is not None, lineup must have at least this number
+            of hitters from team ``team_stack``. If this number is 0 then no
+            players from ``team_stack`` will be included in lineup.
+        variance : int, default 0, Max=10, Min=0
+            The min number of players that must be different in every lineup.
+            Uses ``binary_lineups`` parameter as list of already created lineups
+            and creates constraint that each lineup must have ``variance``
+            number of different players in each lineup. If parameter=0, every
+            lineup would be the same as no players would need to be different
+            from previous lineups. If parameter=10, then every lineup would
+            have to be completely unique with no single player being the same
+            in any lineup.
+        print_progress : bool, default False
+            If True, print update after each lineup is created.
+
+        Returns
+        -------
+        None
+            Created lineup metadata is held in instance attributes ``pitcher_indexes``,
+            ``hitter_indexes``, ``binary_lineups_pitchers``, ``binary_lineups_hitters``.
+        """
+        for i in range(num_lineups):
+            lineup = self.create_lineup(
+                self.binary_lineups_pitchers,
+                self.binary_lineups_hitters,
+                auto_stack=auto_stack,
+                team_stack=team_stack,
+                stack_num=stack_num,
+                variance=variance,
+            )
+
+            self.pitcher_indexes.append(lineup["pitcher_indexes"])
+            self.hitter_indexes.append(lineup["hitter_indexes"])
+            self.binary_lineups_pitchers.append(lineup["binary_pitchers"])
+            self.binary_lineups_hitters.append(lineup["binary_hitters"])
+
+            if print_progress:
+                print(i + 1, "/", num_lineups, sep=" ")
+
+        print("COMPLETE") if print_progress else None
+
     def create_lineup(
         self,
         binary_lineups_pitchers: list,
@@ -44,7 +107,7 @@ class OptimizerMLB:
         stack_num: int = 4,
         variance: int = 0,
     ) -> dict[list]:
-        """Create and runs optimization model.
+        """Runs optimization model to create a single lineup.
 
         Returns data for pitcher/hitter indexes and pitcher/hitter binary lists. The
         index data is used to link back the players selected in lineup to the dataframe
@@ -98,7 +161,6 @@ class OptimizerMLB:
             stack_num=stack_num,
             variance=variance,
         )
-
         # Start with copy of model with constant constraints and add flexible ones as
         # needed below based on function args
         if not hasattr(self, "model"):
@@ -123,6 +185,52 @@ class OptimizerMLB:
         # Returns dict of lists - Keys:
         # {"pitcher_indexes", "hitter_indexes", "binary_pitchers", "binary_hitters"}
         return self._output_lineup(solver)
+
+    def csv_output(self, filename: str) -> list[list]:
+        """Output csv file of lineups using the self.pitcher_indexes and
+        self.hitter_indexes attributes and can be uploaded to Draftkings site.
+
+        Parameters
+        ----------
+        filename : str
+            Name of output csv file.
+        """
+        assert len(self.pitcher_indexes) == len(
+            self.hitter_indexes
+        ), "length of pitcher_indexes and hitter_indexes attributes must be equal."
+
+        uploadable_lineups = self.read_lineup_metadata()
+
+        with open(filename, "w") as csvFile:
+            writer = csv.writer(csvFile)
+            writer.writerows(uploadable_lineups)
+            csvFile.close()
+
+        return "Complete"
+
+    def read_lineup_metadata(self):
+        """Read lineup metadata into uploadable CSV format.
+
+        Returns
+        -------
+        list of lists
+            List of individual lineup lists. Each individual lineup list created using
+            the ``self._to_readable_list`` method.
+        """
+        uploadable_lineups = [["P", "P", "C", "1B", "2B", "3B", "SS", "OF", "OF", "OF"]]
+        cols = ["Name + ID", "Position"]
+
+        for i in range(len(self.pitcher_indexes)):
+            lineup_df = concat(
+                [
+                    self.pitchers.loc[self.pitcher_indexes[i], cols],
+                    self.hitters.loc[self.hitter_indexes[i], cols],
+                ]
+            )
+            lineup_list = self._to_readable_list(lineup_df)
+            uploadable_lineups.append(lineup_list)
+
+        return uploadable_lineups
 
     def _check_create_lineup_args(self, **kwargs):
         """Run assertion statements to ensure inputs to ``self.create_lineup()`` are
@@ -537,116 +645,6 @@ class OptimizerMLB:
             "binary_pitchers": binary_pitchers,
             "binary_hitters": binary_hitters,
         }
-
-    def run_lineups(
-        self,
-        num_lineups: int,
-        auto_stack: bool = False,
-        team_stack: str = None,
-        stack_num: int = 4,
-        variance: int = 0,
-        print_progress: bool = False,
-    ) -> None:
-        """Create 'num_lineups' number of lineups using the ``self.create_lineup``
-        method.
-
-        Parameters
-        ----------
-        num_lineups : int
-            Number of lineups to create.
-        auto_stack : bool, default False
-            If True, force each lineup to include at least 4 players from same team.
-            ``team_stack`` must be None if ``auto_stack`` is True.
-        team_stack : str, default None
-            Team abbreviation to stack at least ``stack_num`` number of
-            players from. ``auto_stack`` must be False if this is not None.
-        stack_num : int, default 4, must be between 0 and 5 (inclusive)
-            If ``team_stack`` is not None, lineup must have at least this number
-            of hitters from team ``team_stack``. If this number is 0 then no
-            players from ``team_stack`` will be included in lineup.
-        variance : int, default 0, Max=10, Min=0
-            The min number of players that must be different in every lineup.
-            Uses ``binary_lineups`` parameter as list of already created lineups
-            and creates constraint that each lineup must have ``variance``
-            number of different players in each lineup. If parameter=0, every
-            lineup would be the same as no players would need to be different
-            from previous lineups. If parameter=10, then every lineup would
-            have to be completely unique with no single player being the same
-            in any lineup.
-        print_progress : bool, default False
-            If True, print update after each lineup is created.
-
-        Returns
-        -------
-        None
-            Created lineup metadata is held in instance attributes ``pitcher_indexes``,
-            ``hitter_indexes``, ``binary_lineups_pitchers``, ``binary_lineups_hitters``.
-        """
-        for i in range(num_lineups):
-            lineup = self.create_lineup(
-                self.binary_lineups_pitchers,
-                self.binary_lineups_hitters,
-                auto_stack=auto_stack,
-                team_stack=team_stack,
-                stack_num=stack_num,
-                variance=variance,
-            )
-
-            self.pitcher_indexes.append(lineup["pitcher_indexes"])
-            self.hitter_indexes.append(lineup["hitter_indexes"])
-            self.binary_lineups_pitchers.append(lineup["binary_pitchers"])
-            self.binary_lineups_hitters.append(lineup["binary_hitters"])
-
-            if print_progress:
-                print(i + 1, "/", num_lineups, sep=" ")
-
-        print("COMPLETE") if print_progress else None
-
-    def csv_output(self, filename: str) -> list[list]:
-        """Output csv file of lineups using the self.pitcher_indexes and
-        self.hitter_indexes attributes and can be uploaded to Draftkings site.
-
-        Parameters
-        ----------
-        filename : str
-            Name of output csv file.
-        """
-        assert len(self.pitcher_indexes) == len(
-            self.hitter_indexes
-        ), "length of pitcher_indexes and hitter_indexes attributes must be equal."
-
-        uploadable_lineups = self.read_lineup_metadata()
-
-        with open(filename, "w") as csvFile:
-            writer = csv.writer(csvFile)
-            writer.writerows(uploadable_lineups)
-            csvFile.close()
-
-        return "Complete"
-
-    def read_lineup_metadata(self):
-        """Read lineup metadata into uploadable CSV format.
-
-        Returns
-        -------
-        list of lists
-            List of individual lineup lists. Each individual lineup list created using
-            the ``self._to_readable_list`` method.
-        """
-        uploadable_lineups = [["P", "P", "C", "1B", "2B", "3B", "SS", "OF", "OF", "OF"]]
-        cols = ["Name + ID", "Position"]
-
-        for i in range(len(self.pitcher_indexes)):
-            lineup_df = concat(
-                [
-                    self.pitchers.loc[self.pitcher_indexes[i], cols],
-                    self.hitters.loc[self.hitter_indexes[i], cols],
-                ]
-            )
-            lineup_list = self._to_readable_list(lineup_df)
-            uploadable_lineups.append(lineup_list)
-
-        return uploadable_lineups
 
     def _to_readable_list(self, df: DataFrame) -> list[str]:
         """Turn ``df`` of players in lineup into list of player IDs.

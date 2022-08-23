@@ -1,28 +1,42 @@
-from pandas import read_csv
+from pandas import DataFrame, read_csv
 
 from mlboptimizer.data_processing import create_dummy_dfs, transform_data
 from mlboptimizer.optimizer_mlb import OptimizerMLB
 
-if __name__ == "__main__":
-    ########## READ AND CLEAN DATA ##########
-    date = "2021-09-04_MAIN"
-    filename = str(input("csv filename: "))
+# CONFIG - change constants as needed
+DATE = "2021-09-04_MAIN"
+TEAM_MAP = {
+    # Only used if running `main_teamstack`
+    "CWS": 15,
+    "CIN": 15,
+    "LAA": 14,
+    "LAD": 14,
+    "SEA": 14,
+    "MIL": 14,
+    "ARI": 14,
+}
 
+
+def read_data(date: str) -> tuple[DataFrame]:
+    """Read and transform data files for input to ``OptimizerMLB``."""
+    # Read in data files
     filename_dk = "./data-dk/DKSalaries_" + date + ".csv"
     filename_proj = "./data-projected/DFF_MLB_cheatsheet_" + date + ".csv"
 
     data_dk = read_csv(filename_dk)
     data_proj = read_csv(filename_proj)
 
-    # Merge projections to DK salary data to make sure have correct salary AND
-    # positional information for each player
-    # projections for some sources only have one position
-    # Filter out players with no projected points later on
-
+    # Clean and process data for input to optimizer
     hitters, pitchers = transform_data(data_dk, data_proj)
     dummies = create_dummy_dfs(hitters, pitchers)
 
-    optimizer = OptimizerMLB(hitters, pitchers, dummies)
+    return hitters, pitchers, dummies
+
+
+def main_autostack(date: str) -> None:
+    out_filename = str(input("csv filename: "))
+    data = read_data(date)
+    optimizer = OptimizerMLB(*data)
 
     # Create x # of auto stacked lineups
     num_lineups = int(input("number of lineups: "))
@@ -31,34 +45,34 @@ if __name__ == "__main__":
     )
 
     # Export to CSV #
-    optimizer.csv_output(filename)
+    optimizer.csv_output(out_filename)
 
-    # #%%
-    ### Create lineups with certain teams stacked
-    #    stack_teams = str(input("Teams to stack (comma separated):\n")).split(", ")
-    #    num_lineups_per_team = int(input("Number of lineups per team:\n"))
 
-    # stack_teams_dict = dict(input("Dictionary - Team : Num lineups"))
-    # stack_teams_dict = {
-    #     "CWS": 15,
-    #     "CIN": 15,
-    #     "LAA": 14,
-    #     "LAD": 14,
-    #     "SEA": 14,
-    #     "MIL": 14,
-    #     "ARI": 14,
-    # }
+def main_teamstack(date: str, team_map: dict) -> None:
+    out_filename = str(input("csv filename: "))
+    data = read_data(date)
+    optimizer = OptimizerMLB(*data)
 
-    # for team, num_lineups_team in stack_teams_dict.items():
-    #     print("Team: " + team)
-    #     optimizer.run_lineups(
-    #         num_lineups_team,
-    #         team_stack=team,
-    #         stack_num=4,
-    #         variance=1,
-    #         print_progress=True,
-    #     )
-    #     print("-" * 10)
+    for team, num_lineups in team_map.items():
+        print("Team: " + team)
+        optimizer.run_lineups(
+            num_lineups,
+            team_stack=team,
+            stack_num=4,
+            variance=1,
+            print_progress=True,
+        )
+        print("-" * 10)
 
-    # # Export to CSV #
-    # optimizer.csv_output(filename)
+    # Export to CSV #
+    optimizer.csv_output(out_filename)
+
+
+if __name__ == "__main__":
+    stack_type = input("Type of lineup stack ('auto' or 'team'): ").lower()
+    if stack_type == "auto":
+        main_autostack(DATE)
+    elif stack_type == "team":
+        main_teamstack(DATE, team_map=TEAM_MAP)
+    else:
+        raise ValueError("Type of lineup stack value must be 'auto' or 'team'")

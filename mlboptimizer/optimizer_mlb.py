@@ -35,6 +35,10 @@ class OptimizerMLB:
         self.binary_lineups_pitchers = []
         self.binary_lineups_hitters = []
 
+        # Create model and add constant constraints across all lineups
+        self._create_model()
+        self._add_model_constraints()
+
     def run_lineups(
         self,
         num_lineups: int,
@@ -163,9 +167,6 @@ class OptimizerMLB:
         )
         # Start with copy of model with constant constraints and add flexible ones as
         # needed below based on function args
-        if not hasattr(self, "model"):
-            self._create_model()
-            self._add_model_constraints()
         model = deepcopy(self.model)
 
         # Flexible constraints

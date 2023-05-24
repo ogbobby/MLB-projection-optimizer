@@ -7,15 +7,14 @@ from mlboptimizer.optimizer_mlb import OptimizerMLB
 DATE = "2023-05-23"
 TEAM_MAP = {
     # Only used if running `main_teamstack`
-    "COL": 1,
-    "HOU":3,
+    #"COL": 3,
+    "HOU": 10,
     #"ATL": 3,
-    "MIA": 3,
-    "SEA": 3,
+    #"MIA": 3,
+    #"SEA": 3,
     #"LAA": 3,
-    "NYY": 2,
-    "BOS": 4,
-    "DET": 4
+    #"NYY": 3,
+    "BOS": 10
 }
 
 

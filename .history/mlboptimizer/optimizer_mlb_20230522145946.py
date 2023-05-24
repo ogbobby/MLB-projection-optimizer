@@ -109,7 +109,7 @@ class OptimizerMLB:
         auto_stack: bool = False,
         team_stack: bool or None = None,
         stack_num: int = 5,
-        variance: int = 2,
+        variance: int = 0,
     ) -> dict[list]:
         """Runs optimization model to create a single lineup.
 

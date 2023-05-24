@@ -4,18 +4,16 @@ from mlboptimizer.data_processing import create_dummy_dfs, transform_data
 from mlboptimizer.optimizer_mlb import OptimizerMLB
 
 # CONFIG - change constants as needed
-DATE = "2023-05-23"
+DATE = "2023-05-22"
 TEAM_MAP = {
     # Only used if running `main_teamstack`
-    "COL": 1,
-    "HOU":3,
-    #"ATL": 3,
-    "MIA": 3,
-    "SEA": 3,
-    #"LAA": 3,
-    "NYY": 2,
-    "BOS": 4,
-    "DET": 4
+    "CWS": 15,
+    "CIN": 15,
+    "LAA": 14,
+    "LAD": 14,
+    "SEA": 14,
+    "MIL": 14,
+    "ARI": 14,
 }
 
 
@@ -43,7 +41,7 @@ def main_autostack(DATE: str) -> None:
     # Create x # of auto stacked lineups
     num_lineups = int(input("number of lineups: "))
     optimizer.run_lineups(
-        num_lineups, print_progress=True, auto_stack=True, stack_num=5, variance=2
+        num_lineups, print_progress=True, auto_stack=True, stack_num=4, variance=2
     )
 
     # Export to CSV #
@@ -60,8 +58,8 @@ def main_teamstack(DATE: str, team_map: dict) -> None:
         optimizer.run_lineups(
             num_lineups,
             team_stack=team,
-            stack_num=5,
-            variance=2,
+            stack_num=4,
+            variance=1,
             print_progress=True,
         )
         print("-" * 10)

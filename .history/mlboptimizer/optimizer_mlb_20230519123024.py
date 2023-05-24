@@ -108,8 +108,8 @@ class OptimizerMLB:
         binary_lineups_hitters: list,
         auto_stack: bool = False,
         team_stack: bool or None = None,
-        stack_num: int = 5,
-        variance: int = 2,
+        stack_num: int = 4,
+        variance: int = 0,
     ) -> dict[list]:
         """Runs optimization model to create a single lineup.
 
@@ -255,7 +255,7 @@ class OptimizerMLB:
             "At least one of 'auto_stack' and 'team_stack' must be " "False/None."
         )
         assert (
-            kwargs["stack_num"] >= 0 and kwargs["stack_num"] <= 6
+            kwargs["stack_num"] >= 0 and kwargs["stack_num"] <= 5
         ), "'stack_num' must be >= 0 and <= 5"
 
     def _create_model(self):
@@ -398,7 +398,7 @@ class OptimizerMLB:
                         for i in range(len(self.hitters_var))
                     ]
                 )
-                <= 9
+                <= 8
             )
         # NO MORE THAN 5 HITTERS FROM ONE TEAM constraint
         for team in self.dummies["hitter_team"].columns:

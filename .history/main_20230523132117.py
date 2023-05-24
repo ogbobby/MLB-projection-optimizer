@@ -7,15 +7,13 @@ from mlboptimizer.optimizer_mlb import OptimizerMLB
 DATE = "2023-05-23"
 TEAM_MAP = {
     # Only used if running `main_teamstack`
-    "COL": 1,
-    "HOU":3,
-    #"ATL": 3,
+    "COL": 3,
+    "HOU": 3,
+    "ATL": 3,
     "MIA": 3,
     "SEA": 3,
-    #"LAA": 3,
-    "NYY": 2,
-    "BOS": 4,
-    "DET": 4
+    "LAA": 3,
+    "NYY": 3,
 }
 
 
@@ -61,7 +59,7 @@ def main_teamstack(DATE: str, team_map: dict) -> None:
             num_lineups,
             team_stack=team,
             stack_num=5,
-            variance=2,
+            variance=1,
             print_progress=True,
         )
         print("-" * 10)

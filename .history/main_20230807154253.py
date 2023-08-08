@@ -4,18 +4,20 @@ from mlboptimizer.data_processing import create_dummy_dfs, transform_data
 from mlboptimizer.optimizer_mlb import OptimizerMLB
 
 # CONFIG - change constants as needed
-DATE = "2023-05-23"
+DATE = "2023-08-07"
 TEAM_MAP = {
     # Only used if running `main_teamstack`
-    "COL": 1,
-    "HOU":3,
-    #"ATL": 3,
-    "MIA": 3,
-    "SEA": 3,
-    #"LAA": 3,
-    "NYY": 2,
-    "BOS": 4,
-    "DET": 4
+    #"COL": 1,
+    #"HOU":3,
+    "ATL": 4,
+    #"MIA": 4,
+    #"SEA": 4,
+    #"CLE": 2,
+    "NYY": 3,
+    "TOR": 3,
+    #"LAA": 2
+    #"SD": 3
+    #"DET": 4
 }
 
 
